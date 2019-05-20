@@ -12,24 +12,24 @@ public extension Decodable
         {
             return nil
         }
-        
+
         guard let data = try? Data(contentsOf: path) else
         {
             return nil
         }
-        
+
         var temp: Data? = data
-        
+
         if let aesKey = aesKey
         {
             temp = try? data.aesDecrypt(key: aesKey, iv: aesIV)
         }
-        
+
         guard let decodeData = temp else
         {
             return nil
         }
-        
+
         return try? JSONDecoder().decode(self, from: decodeData)
     }
 }
@@ -136,18 +136,18 @@ private extension Decodable
     static func __SavePath(for fileName: String) -> URL?
     {
         let fileManager: FileManager = FileManager.default
-        
+
         guard let cachesFolder = fileManager.urls(
             for: .cachesDirectory,
             in: .userDomainMask
-            ).first else
+        ).first else
         {
             return nil
         }
-        
+
         let folder = cachesFolder.appendingPathComponent(AssociatedKey.Codable.DataPath, isDirectory: true)
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        
+
         // 把 User 的副檔名移除, 再加回 .json
         return folder.appendingPathComponent(fileName)
             .deletingPathExtension()
@@ -214,7 +214,7 @@ private extension Decodable
         {
             // 如果參數為 { "Key": [1, 2, 3] }
             // query path = key=1&key=2&key=3
-            if let array = value as? Array<Any>
+            if let array = value as? [Any]
             {
                 let items = array.map
                 {
