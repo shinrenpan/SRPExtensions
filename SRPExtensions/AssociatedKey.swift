@@ -52,6 +52,6 @@ internal extension AssociatedKey
 {
     struct UIImageView
     {
-        static var ImageDataTask = "ImageDataTask"
+        static var DownloadId = "DownloadId"
     }
 }

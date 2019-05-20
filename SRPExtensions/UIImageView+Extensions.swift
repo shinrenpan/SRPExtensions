@@ -9,40 +9,36 @@ public extension UIImageView
     final func imageFrom(
         urlString: String?,
         placeHolder: UIImage? = nil,
-        autoFit: Bool = true
+        autoFit: Bool = true,
+        callback: (() -> Void)? = nil
     )
     {
-        self._imageDataTask?.cancel()
-        self._imageDataTask = nil
-
         DispatchQueue.global().async
         { [weak self] in
+            self?._downloadId = nil
 
-            guard let urlString = urlString else
+            guard
+                let urlString = urlString,
+                let url = URL(string: urlString),
+                let fileName = urlString.md5
+            else
             {
-                self?.__setImage(placeHolder, autoFit: autoFit)
+                DispatchQueue.main.async
+                {
+                    self?.image = autoFit ? placeHolder?.sizeToFit(onView: self) : placeHolder
+                    callback?()
+                }
+
                 return
             }
 
-            guard let url = URL(string: urlString) else
-            {
-                self?.__setImage(placeHolder, autoFit: autoFit)
-                return
-            }
-            
-            guard let fileName = urlString.md5 else
-            {
-                self?.__setImage(placeHolder, autoFit: autoFit)
-                return
-            }
-            
             let fileManager = FileManager.default
 
             let cacheFolder = fileManager.urls(
                 for: .cachesDirectory,
                 in: .userDomainMask
             ).first!.appendingPathComponent(AssociatedKey.UIImage.CachePath, isDirectory: true)
-            
+
             // 每次都要建一次, 不然會有問題. Why?
             try? fileManager.createDirectory(
                 at: cacheFolder,
@@ -54,58 +50,69 @@ public extension UIImageView
             // 如果已經找到 Cache Image
             if let cacheImage = UIImage(contentsOfFile: cacheFilePath.path)
             {
-                self?.__setImage(cacheImage, autoFit: autoFit)
+                DispatchQueue.main.async
+                {
+                    self?.image = autoFit ? cacheImage.sizeToFit(onView: self) : cacheImage
+                    callback?()
+                }
+
                 return
             }
 
+            self?._downloadId = fileName
+
             DispatchQueue.main.async
             {
-                self?.__setImage(placeHolder, autoFit: autoFit)
+                self?.image = autoFit ? placeHolder?.sizeToFit(onView: self) : placeHolder
+                callback?()
             }
 
-            self?._imageDataTask = URLSession.shared.dataTask(with: url)
-            { (data, _ , error) in
-                if let data = data, let image = UIImage(data: data)
+            let configure = URLSessionConfiguration.ephemeral
+            let session = URLSession(configuration: configure)
+
+            session.dataTask(with: url)
+            { data, response, _ in
+                if
+                    let data = data,
+                    let image = UIImage(data: data)
                 {
                     try? data.write(to: cacheFilePath)
-                    self?.__setImage(image, autoFit: autoFit)
-                }
-            }
 
-            self?._imageDataTask?.resume()
+                    if self?._downloadId == response?.url?.absoluteString.md5
+                    {
+                        DispatchQueue.main.async
+                        {
+                            self?.image = autoFit ? image.sizeToFit(onView: self) : image
+                            callback?()
+                        }
+                    }
+                }
+            }.resume()
+
+            session.finishTasksAndInvalidate()
         }
     }
 }
 
 private extension UIImageView
 {
-    var _imageDataTask: URLSessionDataTask?
+    var _downloadId: String?
     {
         get
         {
             return objc_getAssociatedObject(
                 self,
-                &AssociatedKey.UIImageView.ImageDataTask
-            ) as? URLSessionDataTask
+                &AssociatedKey.UIImageView.DownloadId
+            ) as? String
         }
         set
         {
             objc_setAssociatedObject(
                 self,
-                &AssociatedKey.UIImageView.ImageDataTask,
+                &AssociatedKey.UIImageView.DownloadId,
                 newValue,
                 .OBJC_ASSOCIATION_RETAIN_NONATOMIC
             )
-        }
-    }
-
-    final func __setImage(_ image: UIImage?, autoFit: Bool)
-    {
-        DispatchQueue.main.async
-        {
-            self.image = autoFit ? image?.sizeToFit(onView: self) : image
-            self.setNeedsLayout()
-            self.layoutIfNeeded()
         }
     }
 }
